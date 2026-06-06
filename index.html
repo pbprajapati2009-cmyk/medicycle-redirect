@@ -5,33 +5,190 @@
   <title>MediCycle Password Reset</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #eef8ff;
+      min-height: 100vh;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-      margin: 0;
-      background: #eef8ff;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,119,182,0.12);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .logo h1 {
       color: #0077b6;
+      font-size: 26px;
+      font-weight: 800;
     }
-    p { font-size: 16px; font-weight: 600; }
+    .logo p {
+      color: #888;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #dce8f0;
+      border-radius: 10px;
+      font-size: 15px;
+      color: #111;
+      background: #f7fbff;
+      outline: none;
+    }
+    input:focus { border-color: #0077b6; }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #0077b6;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      margin-top: 24px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .message {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      text-align: center;
+      display: none;
+    }
+    .success {
+      background: #e8fff5;
+      color: #057a55;
+      border: 1px solid #bcf0da;
+    }
+    .error {
+      background: #fff0f0;
+      color: #c00;
+      border: 1px solid #fecaca;
+    }
   </style>
-  <script>
-    window.onload = function () {
-      const params = new URLSearchParams(window.location.search)
-      const userId = params.get('userId')
-      const secret = params.get('secret')
-      if (userId && secret) {
-        window.location.href =
-          'medicycle://reset-password?userId=' + userId + '&secret=' + secret
-      }
-    }
-  </script>
 </head>
 <body>
-  <p>Redirecting to MediCycle...</p>
-  <p style="font-size:13px;color:#555;">If nothing happens, open the MediCycle app manually.</p>
+  <div class="card">
+    <div class="logo">
+      <h1>MediCycle</h1>
+      <p>Reset your password</p>
+    </div>
+
+    <div id="formSection">
+      <label>New Password</label>
+      <input type="password" id="password" placeholder="Enter new password" />
+
+      <label>Confirm Password</label>
+      <input type="password" id="confirm" placeholder="Confirm new password" />
+
+      <button id="btn" onclick="resetPassword()">Reset Password</button>
+
+      <div class="message" id="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search)
+    const userId = params.get('userId')
+    const secret = params.get('secret')
+
+    if (!userId || !secret) {
+      document.getElementById('formSection').innerHTML =
+        '<p style="color:#c00;text-align:center">Invalid or expired reset link. Please request a new one in the MediCycle app.</p>'
+    }
+
+    async function resetPassword() {
+      const password = document.getElementById('password').value
+      const confirm = document.getElementById('confirm').value
+      const btn = document.getElementById('btn')
+      const msg = document.getElementById('msg')
+
+      msg.style.display = 'none'
+
+      if (!password || !confirm) {
+        showMessage('Please fill in both fields.', 'error')
+        return
+      }
+      if (password.length < 8) {
+        showMessage('Password must be at least 8 characters.', 'error')
+        return
+      }
+      if (password !== confirm) {
+        showMessage('Passwords do not match.', 'error')
+        return
+      }
+
+      btn.disabled = true
+      btn.textContent = 'Resetting...'
+
+      try {
+        const response = await fetch(
+          'https://fra.cloud.appwrite.io/v1/account/recovery',
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Appwrite-Project': '6a1d33f90012c810c485',
+            },
+            body: JSON.stringify({
+              userId,
+              secret,
+              password,
+            }),
+          }
+        )
+
+        if (response.ok) {
+          document.getElementById('formSection').innerHTML = `
+            <div style="text-align:center;padding:20px">
+              <div style="font-size:48px">✅</div>
+              <h2 style="color:#057a55;margin-top:16px">Password Updated!</h2>
+              <p style="color:#666;margin-top:8px">Your password has been reset successfully.</p>
+              <p style="color:#0077b6;font-weight:700;margin-top:16px">Go back to MediCycle and sign in with your new password.</p>
+            </div>
+          `
+        } else {
+          const data = await response.json()
+          showMessage(data.message || 'Reset failed. Link may have expired.', 'error')
+          btn.disabled = false
+          btn.textContent = 'Reset Password'
+        }
+      } catch (err) {
+        showMessage('Network error. Please try again.', 'error')
+        btn.disabled = false
+        btn.textContent = 'Reset Password'
+      }
+    }
+
+    function showMessage(text, type) {
+      const msg = document.getElementById('msg')
+      msg.textContent = text
+      msg.className = 'message ' + type
+      msg.style.display = 'block'
+    }
+  </script>
 </body>
 </html>
